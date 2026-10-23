@@ -23,6 +23,15 @@ export function MethodDialog() {
         </DialogHeader>
         <div className="space-y-4 text-sm leading-6 text-foreground">
           <section>
+            <h3 className="font-medium">Triagem do Módulo 1</h3>
+            <p className="text-muted-foreground">
+              Os arquivos de animais e de câncer de mama eram as bases falsas. A bancada lê a tabela e
+              recusa a busca. data.csv é a coorte humana de 569 exames. O arquivo de próstata também é
+              humano e pode ser otimizado. Os modelos treinados do Módulo 1 não vieram junto: a comparação
+              parte dos hiperparâmetros de fábrica.
+            </p>
+          </section>
+          <section>
             <h3 className="font-medium">Codificação</h3>
             <p className="text-muted-foreground">
               Cada indivíduo é um vetor de genes entre 0 e 1. A decodificação transforma esse vetor em

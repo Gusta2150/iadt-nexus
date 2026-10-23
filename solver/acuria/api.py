@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from acuria.dataset import OriginError
 from acuria.schemas import ExplainRequest, LogsResponse, OptimizeRequest
 from acuria.service import BusyError, Lab, MissingError
 
@@ -47,6 +48,11 @@ async def missing_handler(_request, exc: MissingError):
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
+@app.exception_handler(OriginError)
+async def origin_handler(_request, exc: OriginError):
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
 @app.exception_handler(Exception)
 async def unexpected_handler(_request, exc: Exception):
     if isinstance(exc, (HTTPException, RequestValidationError)):
@@ -62,8 +68,8 @@ def health():
 
 
 @app.get("/api/overview")
-def overview():
-    return lab.overview()
+def overview(source: str = "data"):
+    return lab.overview(source)
 
 
 @app.post("/api/optimize")

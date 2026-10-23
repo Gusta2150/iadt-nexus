@@ -23,9 +23,9 @@ O navegador fala só com o Next.js, na porta 43123. O Next encaminha `/solver/*`
 
 ## Recorte dos dados
 
-O conjunto é o Wisconsin Diagnostic Breast Cancer, distribuído pelo scikit-learn. São 569 exames e 30 medidas de núcleo celular. A classe positiva é maligno: 212 casos, contra 357 benignos.
+A coorte humana padrão é o `solver/data/data.csv`: 569 exames e 30 medidas de núcleo celular. A classe positiva é maligno: 212 casos, contra 357 benignos. O mesmo diretório guarda a próstata, aceita como outra coorte humana, e as três bases falsas do Módulo 1 (animais e dois arquivos de mama), que a triagem devolve sem treinar.
 
-Os modelos do Módulo 1 não estavam neste repositório. As baselines são regressão logística, árvore de decisão, floresta aleatória e K vizinhos, com os hiperparâmetros de fábrica do scikit-learn.
+Os modelos treinados do Módulo 1 não estavam nesses arquivos. As baselines são regressão logística, árvore de decisão, floresta aleatória e K vizinhos, com os hiperparâmetros de fábrica do scikit-learn.
 
 O recorte, fixo na semente 42, é:
 

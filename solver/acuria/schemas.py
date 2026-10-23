@@ -57,6 +57,7 @@ class OptimizeRequest(BaseModel):
     crossover: Literal["mistura", "uniforme", "um_ponto"] = "mistura"
     seed: int = Field(42, ge=0, le=10_000_000)
     experiments: bool = False
+    source: str = Field("data", min_length=1, max_length=40)
 
 
 class OptimizeResponse(BaseModel):
@@ -89,9 +90,21 @@ class BaselineOut(BaseModel):
     params: list[ParamOut]
 
 
+class SourceOut(BaseModel):
+    id: str
+    filename: str
+    title: str
+    human: bool
+    samples: int
+    detail: str
+
+
 class OverviewResponse(BaseModel):
     dataset: str
     source: str
+    active_source: str
+    accepted: bool
+    rejection: str | None = None
     samples: int
     features: int
     malignant: int
@@ -101,6 +114,7 @@ class OverviewResponse(BaseModel):
     split: SplitOut
     baselines: list[BaselineOut]
     fitness: str
+    sources: list[SourceOut]
 
 
 class FeatureOut(BaseModel):

@@ -30,6 +30,7 @@ export function Bench({
   const [overview, setOverview] = useState<Overview | null>(initialOverview);
   const [loadError, setLoadError] = useState<string | null>(initialError);
   const [pane, setPane] = useState<Pane>("ajuste");
+  const [source, setSource] = useState("data");
   const [model, setModel] = useState<ModelId>("knn");
   const [population, setPopulation] = useState(18);
   const [generations, setGenerations] = useState(12);
@@ -51,7 +52,7 @@ export function Bench({
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [solvedSignature, setSolvedSignature] = useState<string | null>(null);
 
-  const signature = JSON.stringify({ model, population, generations, mutation, crossover, seed, experiments });
+  const signature = JSON.stringify({ source, model, population, generations, mutation, crossover, seed, experiments });
 
   useEffect(() => {
     if (initialOverview) return;
@@ -78,6 +79,22 @@ export function Bench({
   const currentCase = cases.find((item) => item.index === selected) ?? visibleCases[0];
   const stale = Boolean(result && solvedSignature && solvedSignature !== signature);
   const groups = groupFeatures(currentCase);
+
+  async function chooseSource(next: string) {
+    if (next === source || running) return;
+    setSource(next);
+    setResult(null);
+    setCases([]);
+    setReading(null);
+    setReport(null);
+    setRunError(null);
+    setLoadError(null);
+    try {
+      setOverview(await getOverview(next));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "A base não foi lida.");
+    }
+  }
 
   function chooseModel(next: ModelId) {
     setModel(next);
@@ -106,6 +123,7 @@ export function Bench({
         crossover,
         seed,
         experiments,
+        source,
       });
       const loaded = await getCases(response.run_id);
       setResult(response);
@@ -183,7 +201,7 @@ export function Bench({
         </div>
       </header>
       <p className="bg-[#f6efe6] px-4 py-2 text-center text-xs leading-5 text-[#6d5648]">
-        Ensino no conjunto público WDBC, 569 exames de núcleo celular. Não usar para decisão clínica.
+        Triagem do Módulo 1: animais e os arquivos de câncer de mama são base falsa. O diagnóstico segue no data.csv. Não usar para decisão clínica.
       </p>
 
       <div className="mx-auto flex max-w-[1440px] gap-2 px-4 py-3 lg:hidden">
@@ -211,6 +229,33 @@ export function Bench({
 
       <main className="mx-auto grid max-w-[1440px] gap-4 px-4 pb-8 lg:grid-cols-[300px_minmax(0,1fr)_390px] lg:pt-4">
         <section className={cn("flex flex-col gap-4", pane !== "ajuste" && "hidden lg:flex")}>
+          <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
+            <p className="text-xs tracking-wide text-muted-foreground uppercase">Base do Módulo 1</p>
+            <div className="mt-3 grid gap-2">
+              {(overview?.sources ?? []).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={running}
+                  onClick={() => chooseSource(item.id)}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-left transition-colors",
+                    source === item.id ? "border-primary bg-[#e7f3ef]" : "border-border bg-transparent hover:bg-muted",
+                  )}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{item.filename}</span>
+                    <span className={cn("text-[10px] tracking-wide uppercase", item.human ? "text-primary" : "text-destructive")}>
+                      {item.human ? "Humano" : "Falsa"}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {item.title} · {item.samples} linhas
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
             <p className="text-xs tracking-wide text-muted-foreground uppercase">Modelo</p>
             <div className="mt-3 grid gap-2">
@@ -299,13 +344,24 @@ export function Bench({
               </div>
             </div>
             <p className="mt-3 text-xs leading-5 text-muted-foreground">{durationHint}</p>
-            <Button type="button" className="mt-3 h-10 w-full" disabled={running || !overview} onClick={runSearch}>
-              {running ? "Treinando a população…" : experiments ? "Comparar 3 configurações" : "Otimizar hiperparâmetros"}
+            <Button
+              type="button"
+              className="mt-3 h-10 w-full"
+              disabled={running || !overview?.accepted}
+              onClick={runSearch}
+            >
+              {running
+                ? "Treinando a população…"
+                : !overview?.accepted
+                  ? "Base recusada pela triagem"
+                  : experiments
+                    ? "Comparar 3 configurações"
+                    : "Otimizar hiperparâmetros"}
             </Button>
             {runError && <p className="mt-2 text-xs leading-5 text-destructive">{runError}</p>}
           </div>
 
-          {overview && (
+          {overview?.accepted && (
             <p className="px-1 text-xs leading-5 text-muted-foreground">
               {overview.samples} casos, {overview.malignant} malignos e {overview.benign} benignos. Recorte:{" "}
               {overview.split.train} treino, {overview.split.validation} validação, {overview.split.test} teste.
@@ -315,7 +371,14 @@ export function Bench({
 
         <section className={cn("min-w-0", pane !== "resultados" && "hidden lg:block")}>
           {!overview && !loadError && <Skeleton />}
-          {overview && !result && <BaselineBoard overview={overview} active={model} />}
+          {overview && !overview.accepted && (
+            <div className="rounded-xl bg-[#fdf2f0] p-5 ring-1 ring-destructive/30">
+              <p className="text-xs tracking-wide text-destructive uppercase">Triagem do Módulo 1</p>
+              <h2 className="mt-2 font-serif text-2xl tracking-tight">Esta base não é dado humano</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-[#6d2c26]">{overview.rejection}</p>
+            </div>
+          )}
+          {overview?.accepted && !result && <BaselineBoard overview={overview} active={model} />}
           {result && original && chosen && (
             <div className="space-y-4">
               {stale && (
@@ -478,9 +541,14 @@ export function Bench({
                 </p>
               </div>
             </div>
-            {!result && (
+            {!result && overview?.accepted && (
               <p className="mt-4 text-sm leading-6 text-muted-foreground">
-                Otimize um modelo para revisar os {overview?.split.test ?? 114} casos escondidos da busca e gerar a leitura.
+                Otimize um modelo para revisar os {overview.split.test} casos escondidos da busca e gerar a leitura.
+              </p>
+            )}
+            {!result && overview && !overview.accepted && (
+              <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                A leitura clínica só aparece depois de uma busca numa coorte humana.
               </p>
             )}
             {result && (

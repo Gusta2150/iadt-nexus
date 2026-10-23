@@ -20,15 +20,28 @@ export type Baseline = {
   params: Param[];
 };
 
+export type DataSource = {
+  id: string;
+  filename: string;
+  title: string;
+  human: boolean;
+  samples: number;
+  detail: string;
+};
+
 export type Overview = {
   dataset: string;
   source: string;
+  active_source: string;
+  accepted: boolean;
+  rejection: string | null;
   samples: number;
   features: number;
   malignant: number;
   benign: number;
   positive_label: string;
   note: string;
+  sources: DataSource[];
   split: {
     train: number;
     validation: number;

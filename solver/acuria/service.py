@@ -10,7 +10,7 @@ import logging
 
 import numpy as np
 
-from acuria.dataset import Bundle, load_bundle
+from acuria.dataset import Bundle, OriginError, get_source, list_sources, load_bundle
 from acuria.encoding import LABELS, BLURBS, Decoded
 from acuria.genetic import GAConfig, GARun, experiment_configs, run_ga
 from acuria.language import narrate
@@ -28,6 +28,7 @@ from acuria.schemas import (
     OverviewResponse,
     ParamOut,
     RunSummary,
+    SourceOut,
     SplitOut,
     scores_out,
 )
@@ -64,6 +65,7 @@ class StoredRun:
     runs: list[RunSummary]
     importance: list[ImportanceOut]
     seed: int
+    bundle: Bundle
 
 
 @dataclass
@@ -87,27 +89,59 @@ class Monitor:
 
 class Lab:
     def __init__(self) -> None:
-        self.bundle: Bundle = load_bundle(42)
         self.monitor = Monitor()
-        self._overview: OverviewResponse | None = None
+        self._bundles: dict[str, Bundle] = {}
+        self._overviews: dict[str, OverviewResponse] = {}
         self._runs: dict[str, StoredRun] = {}
         self._guard = Lock()
         self._busy = Lock()
 
-    def overview(self) -> OverviewResponse:
-        if self._overview is not None:
-            return self._overview
+    def overview(self, source: str = "data") -> OverviewResponse:
+        cached = self._overviews.get(source)
+        if cached is not None:
+            return cached
         with self._guard:
-            if self._overview is None:
-                self._overview = self._build_overview()
-        return self._overview
+            cached = self._overviews.get(source)
+            if cached is None:
+                cached = self._build_overview(source)
+                self._overviews[source] = cached
+        return cached
 
-    def _build_overview(self) -> OverviewResponse:
-        split = self.bundle.split
+    def _build_overview(self, source: str) -> OverviewResponse:
+        spec = self._spec(source)
+        sources = _source_list()
+        if not spec.human:
+            self.monitor.event(f"Triagem recusou {spec.filename}: base falsa do Módulo 1.")
+            return OverviewResponse(
+                dataset=spec.title,
+                source=spec.filename,
+                active_source=spec.id,
+                accepted=False,
+                rejection=spec.detail,
+                samples=spec.samples,
+                features=spec.features,
+                malignant=spec.malignant,
+                benign=spec.benign,
+                positive_label="maligno",
+                note=spec.detail,
+                split=SplitOut(
+                    train=0,
+                    validation=0,
+                    test=0,
+                    malignant_train=0,
+                    malignant_validation=0,
+                    malignant_test=0,
+                ),
+                baselines=[],
+                fitness=FITNESS_TEXT,
+                sources=sources,
+            )
+        bundle = self._bundle(spec.id)
+        split = bundle.split
         baselines: list[BaselineOut] = []
         for model in ("logistica", "arvore", "floresta", "knn"):
             _estimator, decoded, test, validation, _pred, _proba = refit_and_test(
-                model, baseline_genes(model), self.bundle, 42
+                model, baseline_genes(model), bundle, 42
             )
             baselines.append(
                 BaselineOut(
@@ -119,18 +153,24 @@ class Lab:
                     params=_params(decoded),
                 )
             )
-        self.monitor.event("Baselines dos quatro modelos originais calculadas.")
+        self.monitor.event(f"Baselines calculadas em {spec.filename}.")
+        cohort = "data.csv, a coorte humana" if spec.id == "data" else spec.filename
         return OverviewResponse(
-            dataset="Wisconsin Diagnostic Breast Cancer",
-            source="UCI, via scikit-learn",
+            dataset=spec.title,
+            source=spec.filename,
+            active_source=spec.id,
+            accepted=True,
+            rejection=None,
             samples=int(split.y_train.size + split.y_val.size + split.y_test.size),
-            features=len(self.bundle.features),
-            malignant=self.bundle.malignant,
-            benign=self.bundle.benign,
+            features=len(bundle.features),
+            malignant=bundle.malignant,
+            benign=bundle.benign,
             positive_label="maligno",
             note=(
-                "Os modelos do Módulo 1 não estavam neste repositório. As baselines são os "
-                "classificadores do scikit-learn com hiperparâmetros de fábrica, no mesmo recorte."
+                f"Triagem do Módulo 1 aceitou {cohort}. Os modelos treinados do Módulo 1 "
+                "não vieram nos arquivos: as baselines são os quatro classificadores de fábrica "
+                "neste recorte. Animais e os arquivos de câncer de mama marcados como base falsa "
+                "não entram na busca."
             ),
             split=SplitOut(
                 train=int(split.y_train.size),
@@ -142,7 +182,21 @@ class Lab:
             ),
             baselines=baselines,
             fitness=FITNESS_TEXT,
+            sources=sources,
         )
+
+    def _spec(self, source: str):
+        try:
+            return get_source(source)
+        except KeyError as exc:
+            raise MissingError("Essa base não está no Módulo 1.") from exc
+
+    def _bundle(self, source: str) -> Bundle:
+        cached = self._bundles.get(source)
+        if cached is None:
+            cached = load_bundle(42, source)
+            self._bundles[source] = cached
+        return cached
 
     def optimize(self, request: OptimizeRequest) -> OptimizeResponse:
         if not self._busy.acquire(blocking=False):
@@ -155,6 +209,11 @@ class Lab:
             self._busy.release()
 
     def _optimize(self, request: OptimizeRequest) -> OptimizeResponse:
+        spec = self._spec(request.source)
+        if not spec.human:
+            self.monitor.event(f"Busca recusada em {spec.filename}: a triagem não aceita base falsa.")
+            raise OriginError(spec.detail)
+        bundle = self._bundle(spec.id)
         started_evals = 0
         runs: list[tuple[GARun, object, Decoded, object, object]] = []
         configs = (
@@ -167,9 +226,9 @@ class Lab:
             f"({'3 configurações' if request.experiments else '1 configuração'}, semente {request.seed})."
         )
         for label, config in configs:
-            ga_run = run_ga(request.model, self.bundle, config, label=label)
+            ga_run = run_ga(request.model, bundle, config, label=label)
             estimator, decoded, test, validation, pred, proba = refit_and_test(
-                request.model, ga_run.genes, self.bundle, request.seed
+                request.model, ga_run.genes, bundle, request.seed
             )
             # A validação publicada é a do próprio AG, no ajuste só com o treino.
             ga_run.validation = validation
@@ -180,7 +239,7 @@ class Lab:
             )
 
         original_estimator, original_decoded, original_test, original_val, _op, _ob = refit_and_test(
-            request.model, baseline_genes(request.model), self.bundle, request.seed
+            request.model, baseline_genes(request.model), bundle, request.seed
         )
         _ = original_estimator
         summaries = [
@@ -223,7 +282,7 @@ class Lab:
         summary, decoded, pred, proba, estimator = chosen
         importance = [
             ImportanceOut(label=label, share=round(share, 6))
-            for label, share in global_importance(request.model, estimator, self.bundle)[:8]
+            for label, share in global_importance(request.model, estimator, bundle)[:8]
         ]
         run_id = uuid4().hex[:8]
         elapsed = round(sum(item.elapsed_ms for item in summaries), 1)
@@ -238,6 +297,7 @@ class Lab:
                 runs=summaries,
                 importance=importance,
                 seed=request.seed,
+                bundle=bundle,
             )
             if len(self._runs) > 8:
                 oldest = next(iter(self._runs))
@@ -265,14 +325,14 @@ class Lab:
 
     def cases(self, run_id: str) -> CasesResponse:
         stored = self._get(run_id)
-        split = self.bundle.split
+        split = stored.bundle.split
         rows: list[CaseOut] = []
         for index in range(split.y_test.size):
             actual = "maligno" if int(split.y_test[index]) == 1 else "benigno"
             predicted = "maligno" if int(stored.test_pred[index]) == 1 else "benigno"
             features = [
                 FeatureOut(label=feature.label, group=feature.group, value=float(split.X_test[index, column]))
-                for column, feature in enumerate(self.bundle.features)
+                for column, feature in enumerate(stored.bundle.features)
             ]
             rows.append(
                 CaseOut(
@@ -306,15 +366,15 @@ class Lab:
         return NarrativeResponse(**payload)
 
     def _case_context(self, stored: StoredRun, case_index: int) -> dict:
-        split = self.bundle.split
+        split = stored.bundle.split
         if case_index < 0 or case_index >= split.y_test.size:
             raise MissingError("Esse caso não está no conjunto de teste.")
         row = split.X_test[case_index]
-        signed, neighbor = local_signals(stored.model, stored.estimator, self.bundle, row)
+        signed, neighbor = local_signals(stored.model, stored.estimator, stored.bundle, row)
         order = np.argsort(np.abs(signed))[::-1][:4]
         top = []
         for column in order:
-            feature = self.bundle.features[int(column)]
+            feature = stored.bundle.features[int(column)]
             value = float(row[int(column)])
             top.append(
                 {
@@ -399,6 +459,20 @@ class BusyError(RuntimeError):
 
 class MissingError(RuntimeError):
     pass
+
+
+def _source_list() -> list[SourceOut]:
+    return [
+        SourceOut(
+            id=spec.id,
+            filename=spec.filename,
+            title=spec.title,
+            human=spec.human,
+            samples=spec.samples,
+            detail=spec.detail,
+        )
+        for spec in list_sources()
+    ]
 
 
 def baseline_genes(model: str) -> list[float]:

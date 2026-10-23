@@ -2,7 +2,7 @@
 
 Bancada do Projeto 1 da Fase 2. Um algoritmo genético ajusta hiperparâmetros de modelos de diagnóstico, e um redator transforma o resultado em texto para a equipe médica.
 
-O conjunto é o Wisconsin Diagnostic Breast Cancer: 569 exames, 30 medidas de núcleo celular, classe positiva maligno. Os modelos do Módulo 1 não estavam neste repositório. As baselines são regressão logística, árvore de decisão, floresta aleatória e K vizinhos com os hiperparâmetros de fábrica do scikit-learn.
+As bases do Módulo 1 estão em `solver/data`. `data.csv` é a coorte humana: 569 exames, 30 medidas de núcleo celular, classe positiva maligno. `cancer_prostata_data.csv` é a outra coorte humana. `animais_data.csv`, `cancer_mama_1_diagnostico.csv` e `breast_cancer_sample.csv` são as bases falsas: a triagem recusa esses arquivos e a busca não roda. Os modelos treinados do Módulo 1 não vieram nos arquivos. As baselines são regressão logística, árvore de decisão, floresta aleatória e K vizinhos com os hiperparâmetros de fábrica do scikit-learn.
 
 O teste fica fora da busca. A função fitness, só na validação, é 50% recall de malignidade, 35% F1 e 15% precisão.
 

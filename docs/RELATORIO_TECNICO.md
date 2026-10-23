@@ -6,7 +6,7 @@ Projeto 1 da Fase 2: otimização de modelos de diagnóstico com algoritmo gené
 
 Uma bancada com quatro classificadores sobre o Wisconsin Diagnostic Breast Cancer. O algoritmo genético procura hiperparâmetros e o limiar de malignidade. O comparativo separa validação, que a busca enxerga, de teste, que ela não enxerga. Um redator transforma esses números em texto para a equipe.
 
-Os artefatos do Módulo 1 não vieram no repositório. As baselines são os modelos de fábrica do scikit-learn, no mesmo recorte, para o comparativo ter um original honesto.
+Os arquivos do Módulo 1 estão em `solver/data`. A triagem aceita `data.csv` (coorte humana, 569 exames) e `cancer_prostata_data.csv` (100 casos). Recusa `animais_data.csv`, `cancer_mama_1_diagnostico.csv` e `breast_cancer_sample.csv`, que nesse módulo eram as bases falsas para o sistema reconhecer que a origem não era a coorte humana. Os modelos já treinados não vieram nesses arquivos. As baselines continuam sendo os modelos de fábrica do scikit-learn, no mesmo recorte, para o comparativo ter um original honesto. `data.csv` é o Wisconsin Diagnostic Breast Cancer na ordem clássica, então os números da semente 42 abaixo seguem iguais.
 
 ## Algoritmo genético
 

@@ -17,8 +17,9 @@ async function read<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function getOverview() {
-  return fetch("/solver/api/overview", { cache: "no-store" }).then((response) => read<Overview>(response));
+export function getOverview(source = "data") {
+  const query = new URLSearchParams({ source });
+  return fetch(`/solver/api/overview?${query}`, { cache: "no-store" }).then((response) => read<Overview>(response));
 }
 
 export function optimize(input: {
@@ -29,6 +30,7 @@ export function optimize(input: {
   crossover: Crossover;
   seed: number;
   experiments: boolean;
+  source: string;
 }) {
   return fetch("/solver/api/optimize", {
     method: "POST",
